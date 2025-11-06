@@ -21,18 +21,21 @@ fuente = pygame.font.SysFont(None, 22)
 TIPOS_PANELES = {
     "monocristalino": {
         "color": (0, 0, 0),
+        "imagen":"monocristalino.png",
         "eficiencia": 0.22,
         "descripcion": "Alta eficiencia, panel negro sólido.",
         "detalle": "Convierte más energía, ideal para espacio limitado."
     },
     "policristalino": {
         "color": (30, 144, 255),
+        "imagen":"policristalino.jpg",
         "eficiencia": 0.17,
         "descripcion": "Eficiencia media, azul metalizado.",
         "detalle": "Más económico, menor rendimiento térmico."
     },
     "pelicula": {
         "color": (100, 100, 100),
+        "imagen":"panelfino.png",
         "eficiencia": 0.12,
         "descripcion": "Baja eficiencia, gris oscuro.",
         "detalle": "Flexible, buen rendimiento con luz difusa."
@@ -57,8 +60,17 @@ def dibujar_panel_tipo(superficie, base_x, base_y, angulo, tipo_panel):
     ancho_panel = 120
     alto_panel = 40
     panel_rect = pygame.Surface((ancho_panel, alto_panel), pygame.SRCALPHA)
-    panel_rect.fill(color_panel)
-    panel_rotado = pygame.transform.rotate(panel_rect, angulo)
+    # Cargar imagen si existe
+    try:
+        textura = pygame.image.load(info["imagen"]).convert_alpha()
+        # Redimensionar la textura al tamaño del panel
+        textura = pygame.transform.scale(textura, (ancho_panel, alto_panel))
+    except:
+        # Si no hay imagen, usa color sólido
+        textura = pygame.Surface((ancho_panel, alto_panel), pygame.SRCALPHA)
+        textura.fill(color_panel)
+
+    panel_rotado = pygame.transform.rotate(textura, angulo)
 
     pos_panel = (base_x - panel_rotado.get_width() // 2, base_y - largo_palo - panel_rotado.get_height() // 2)
     superficie.blit(panel_rotado, pos_panel)
@@ -165,11 +177,11 @@ def principal():
         # Dibuja el panel y obtiene su info
         info = dibujar_panel_tipo(pantalla, base_panel[0], base_panel[1], angulo_panel, tipo_panel)
 
-        # Simulación simple de energía generada
+        # Simulación simple de energía
         radiacion = 800  # W/m² (valor constante para la demo)
         potencia = radiacion * area_panel * info["eficiencia"]
 
-        # Mostrar información del panel
+        # Informacion del panel
         info_texto = [
             f"Tipo: {tipo_panel.capitalize()}",
             f"Eficiencia: {info['eficiencia']*100:.1f}%",
