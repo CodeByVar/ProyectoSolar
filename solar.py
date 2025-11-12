@@ -55,11 +55,23 @@ def guardar_posicion(x, y):
     except Exception as e:
         print("Error al guardar:", e)
 
-def posicion_aleatoria():
+def posicion_aleatoria(tipo_panel):
+    """
+    Genera una posición aleatoria para el sol, **pero asegurándose**
+    de que quede por encima del panel solar (en toda la zona superior).
+    """
     w, h = viewport_size()
     margen = max(40, MARGEN_PX)
+    base_y = h - 100
+    largo_palo = 100
+    alto_panel = 40 if tipo_panel == "horizontal" else 100
+    panel_top = base_y - largo_palo - (alto_panel / 2)
+    limite_superior_y = int(panel_top - RADIO_SOL - 8)
+    if limite_superior_y <= margen:
+        limite_superior_y = margen + 10
+
     x = random.randint(margen, max(margen, w - margen))
-    y = random.randint(margen, max(margen, h - margen))
+    y = random.randint(margen, limite_superior_y)
     return x, y
 
 def dibujar_brillo(superficie, centro, radio_interno, radio_externo, color=(255, 210, 40)):
@@ -174,7 +186,7 @@ def menu():
 def principal():
     tipo_panel = menu()
 
-    sol_x, sol_y = posicion_aleatoria()
+    sol_x, sol_y = posicion_aleatoria(tipo_panel)
     tiempo_sol = pygame.time.get_ticks()
     guardar_posicion(sol_x, sol_y)
 
@@ -195,7 +207,7 @@ def principal():
                 if evento.key == pygame.K_ESCAPE:
                     ejecutando = False
                 elif evento.key == pygame.K_r:
-                    sol_x, sol_y = posicion_aleatoria()
+                    sol_x, sol_y = posicion_aleatoria(tipo_panel)
                     tiempo_sol = ahora
                     guardar_posicion(sol_x, sol_y)
                 elif evento.key == pygame.K_f:
@@ -204,7 +216,7 @@ def principal():
                     seguimiento_continuo = not seguimiento_continuo
 
         if ahora - tiempo_sol >= INTERVALO_MS:
-            sol_x, sol_y = posicion_aleatoria()
+            sol_x, sol_y = posicion_aleatoria(tipo_panel)
             tiempo_sol = ahora
             guardar_posicion(sol_x, sol_y)
             print(f"[{time.strftime('%H:%M:%S')}] Nuevo sol en: ({sol_x}, {sol_y})")
