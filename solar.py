@@ -27,6 +27,15 @@ ANG_MIN, ANG_MAX = -85, 85
 Kp = 0.35
 VEL_MAX = 3.5
 
+# ---parámetros de movimiento realista ---
+MODO_REALISTA = True                 # ON por defecto
+VEL_MAX_DEG_PER_SEC = 140.0          # límite de velocidad (°/s)
+ACC_MAX_DEG_PER_SEC2 = 300.0         # límite de aceleración (°/s²)
+FRICCION_ZETA = 2.5
+BANDA_MUERTA_DEG = 1.5               # zona sin corrección
+HISTERESIS_DEG = 0.5                 # salida de la zona
+RAFAGA_VIENTO_ON = False             # (G) alterna ráfagas
+
 os.environ["SDL_VIDEO_CENTERED"] = "1"
 pygame.init()
 
@@ -304,6 +313,10 @@ def principal():
     angulo_panel = 0
     seguimiento_continuo = True # De origin/main
 
+    # ---estado del movimiento realista ---
+    vel_ang = 0.0
+    en_banda_muerta = False
+
     ejecutando = True
     while ejecutando:
         dt = reloj.tick(60)  # Delta time en milisegundos (para movimiento suave)
@@ -327,6 +340,10 @@ def principal():
                     toggle_fullscreen()
                 elif evento.key == pygame.K_t:
                     seguimiento_continuo = not seguimiento_continuo
+                # --- AÑADIDO: alternar viento ---
+                elif evento.key == pygame.K_g:
+                    global RAFAGA_VIENTO_ON
+                    RAFAGA_VIENTO_ON = not RAFAGA_VIENTO_ON
 
         # --- LÓGICA DE NUBES (De HEAD) ---
         for cloud in nubes:
@@ -367,15 +384,38 @@ def principal():
             delta = clamp(Kp * error, -VEL_MAX, VEL_MAX)
             angulo_panel = clamp(angulo_panel + delta, ANG_MIN, ANG_MAX)
 
+        # --- movimiento realista (inercia, aceleración, fricción y banda muerta) ---
+        if seguimiento_continuo and MODO_REALISTA:
+            if en_banda_muerta:
+                if abs(error) > (BANDA_MUERTA_DEG + HISTERESIS_DEG):
+                    en_banda_muerta = False
+            else:
+                if abs(error) <= BANDA_MUERTA_DEG:
+                    en_banda_muerta = True
+
+            if en_banda_muerta:
+                vel_obj = 0.0
+            else:
+                vel_obj = clamp(Kp * error * (VEL_MAX_DEG_PER_SEC / max(VEL_MAX, 1e-6)),
+                                -VEL_MAX_DEG_PER_SEC, VEL_MAX_DEG_PER_SEC)
+
+            acc = clamp(vel_obj - vel_ang, -ACC_MAX_DEG_PER_SEC2 * dt_seg, ACC_MAX_DEG_PER_SEC2 * dt_seg)
+            if RAFAGA_VIENTO_ON and random.random() < 0.1:
+                acc += random.gauss(0.0, 15.0) * dt_seg
+
+            vel_ang = (vel_ang * max(0.0, 1.0 - FRICCION_ZETA * dt_seg)) + acc
+            vel_ang = clamp(vel_ang, -VEL_MAX_DEG_PER_SEC, VEL_MAX_DEG_PER_SEC)
+
+            angulo_panel += vel_ang * dt_seg
+            if angulo_panel < ANG_MIN:
+                angulo_panel = ANG_MIN; vel_ang = 0.0
+            elif angulo_panel > ANG_MAX:
+                angulo_panel = ANG_MAX; vel_ang = 0.0
+
         # --- CÁLCULO DE ENERGÍA MEJORADO (De HEAD) ---
         radiacion_maxima = 800
-        # 4. Factor de eficiencia angular: cos(ángulo de incidencia).
-        factor_incidencia = math.cos(math.radians(abs(error))) # El error es la diferencia angular
-
-        # Radiación efectiva que impacta la superficie
+        factor_incidencia = math.cos(math.radians(abs(error)))
         radiacion_efectiva = radiacion_maxima * max(0, factor_incidencia)
-
-        # Potencia generada (usando la eficiencia del tipo de panel)
         potencia = radiacion_efectiva * area_panel * panel_info["eficiencia"]
 
         # --- DIBUJO ---
@@ -391,23 +431,22 @@ def principal():
         # --- HUD (Combinación) ---
         tiempo_restante = max(0, INTERVALO_MS - (ahora - tiempo_sol)) / 1000.0
 
-        # Indicador visual de rendimiento (verde=bueno, amarillo=medio, rojo=malo)
         rendimiento_color = (0, 255, 0) if factor_incidencia > 0.9 else (
             (255, 255, 0) if factor_incidencia > 0.6 else (255, 100, 100))
 
+        # muestra de velocidad y estados
         hud_txt = (
             f"Tipo: {tipo_panel.capitalize()} | Seguimiento: {'ON' if seguimiento_continuo else 'OFF'} | "
             f"Potencia: {potencia:.1f} W | Rendimiento Angular: {max(0, factor_incidencia) * 100:.1f}% | "
             f"Error: {int(error):>3}° | Ángulo Panel: {int(angulo_panel):>3}° | "
-            f"[T] toggle | [R] sol | [Q/E] manual | [F] full | {tiempo_restante:4.1f}s p/ sol"
+            f"Vel: {vel_ang:4.1f}°/s | Realista:{'ON' if MODO_REALISTA else 'OFF'} | Viento:{'ON' if RAFAGA_VIENTO_ON else 'OFF'} | "
+            f"[T] toggle | [R] sol | [Q/E] manual | [F] full | [G] viento"
         )
-        # Se podría usar hud() pero el color es importante, así que dibujamos texto directo:
         surf_txt = fuente.render(hud_txt, True, rendimiento_color)
         barra = pygame.Surface((w, 28), pygame.SRCALPHA)
         barra.fill(COLOR_HUD_BG)
         pantalla.blit(barra, (0, 0))
         pantalla.blit(surf_txt, (8, 5))
-
 
         pygame.display.flip()
 
