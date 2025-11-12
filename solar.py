@@ -340,7 +340,7 @@ def principal():
                     toggle_fullscreen()
                 elif evento.key == pygame.K_t:
                     seguimiento_continuo = not seguimiento_continuo
-                # --- AÑADIDO: alternar viento ---
+                # --- alternar viento ---
                 elif evento.key == pygame.K_g:
                     global RAFAGA_VIENTO_ON
                     RAFAGA_VIENTO_ON = not RAFAGA_VIENTO_ON
