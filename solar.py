@@ -141,7 +141,7 @@ def guardar_posicion(x, y):
         "tiempo_ms": int(time.time() * 1000)
     }
     try:
-        with open("posicion_sol.json", "w") as f:
+        with open("", "w") as f:
             json.dump(datos, f)
     except Exception as e:
         print("Error al guardar:", e)
