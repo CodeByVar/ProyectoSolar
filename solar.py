@@ -23,8 +23,11 @@ COLOR_NORMAL = (120, 220, 255)
 COLOR_ERROR = (255, 120, 120)
 
 ANG_MIN, ANG_MAX = -85, 85
-Kp = 0.35
+Kp = 0.15
+Ki = 0.0001
+Kd = 0.02
 VEL_MAX = 3.5
+SMOOTH = 0.22
 
 MODO_REALISTA = True
 VEL_MAX_DEG_PER_SEC = 140.0
@@ -284,12 +287,15 @@ def principal():
     sol_x, sol_y = posicion_aleatoria(tipo_panel)
     tiempo_sol = pygame.time.get_ticks()
     guardar_posicion(sol_x, sol_y)
-    angulo_panel = 0
+    angulo_panel = 0.0
     seguimiento_continuo = True
     vel_ang = 0.0
     en_banda_muerta = False
     ejecutando = True
     iluminacion_actual = 0.0
+    pid_integral = 0.0
+    pid_prev_error = 0.0
+    pid_integral_limit = 50.0
     while ejecutando:
         dt = reloj.tick(60)
         dt_seg = dt / 1000.0
@@ -338,8 +344,15 @@ def principal():
         ang_objetivo = angulo_hacia_punto(punta_x, punta_y, sol_x, sol_y)
         error = normalize_angle_deg(ang_objetivo - angulo_panel)
         if seguimiento_continuo:
-            delta = clamp(Kp * error, -VEL_MAX, VEL_MAX)
-            angulo_panel = clamp(angulo_panel + delta, ANG_MIN, ANG_MAX)
+            if dt_seg <= 0:
+                dt_seg = 1e-6
+            pid_integral += error * dt_seg
+            pid_integral = clamp(pid_integral, -pid_integral_limit, pid_integral_limit)
+            derivada = (error - pid_prev_error) / dt_seg
+            pid_prev_error = error
+            salida_pid = (Kp * error) + (Ki * pid_integral) + (Kd * derivada)
+            salida_pid_clamped = clamp(salida_pid, -VEL_MAX, VEL_MAX)
+            angulo_panel = clamp(angulo_panel + salida_pid_clamped * SMOOTH, ANG_MIN, ANG_MAX)
         if seguimiento_continuo and MODO_REALISTA:
             if en_banda_muerta:
                 if abs(error) > (BANDA_MUERTA_DEG + HISTERESIS_DEG):
@@ -350,7 +363,14 @@ def principal():
             if en_banda_muerta:
                 vel_obj = 0.0
             else:
-                vel_obj = clamp(Kp * error * (VEL_MAX_DEG_PER_SEC / max(VEL_MAX, 1e-6)),
+                if dt_seg <= 0:
+                    dt_seg = 1e-6
+                pid_integral += error * dt_seg
+                pid_integral = clamp(pid_integral, -pid_integral_limit, pid_integral_limit)
+                derivada = (error - pid_prev_error) / dt_seg
+                pid_prev_error = error
+                salida_pid = (Kp * error) + (Ki * pid_integral) + (Kd * derivada)
+                vel_obj = clamp(salida_pid * (VEL_MAX_DEG_PER_SEC / max(VEL_MAX, 1e-6)),
                                 -VEL_MAX_DEG_PER_SEC, VEL_MAX_DEG_PER_SEC)
             acc = clamp(vel_obj - vel_ang, -ACC_MAX_DEG_PER_SEC2 * dt_seg, ACC_MAX_DEG_PER_SEC2 * dt_seg)
             if RAFAGA_VIENTO_ON and random.random() < 0.1:
