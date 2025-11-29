@@ -98,6 +98,47 @@ TIPOS_PANELES = {
 }
 
 
+PANEL_W = 220
+PANEL_X = ANCHO - PANEL_W - 10 # Posición inicial del panel
+COLOR_PANEL_BG = (40, 45, 55, 220)
+COLOR_BOTON_ACTIVO = (255, 165, 0)
+COLOR_BOTON_INACTIVO = (70, 70, 70)
+
+MODOS_CLIMATICOS = {
+    "soleado": {
+        "coef_ilum": 1.0,
+        "prob_nube": 0.05,
+        "vel_nube_min": 5,
+        "vel_nube_max": 15,
+        "descripcion": "Cielo claro, máxima irradiancia.",
+        "idx": 0 # Nuevo índice para el botón
+    },
+    "parcialmente_nublado": {
+        "coef_ilum": 0.85,
+        "prob_nube": 0.4,
+        "vel_nube_min": 15,
+        "vel_nube_max": 30,
+        "descripcion": "Alternando sol y nubes.",
+        "idx": 1
+    },
+    "nublado": {
+        "coef_ilum": 0.35,
+        "prob_nube": 0.8,
+        "vel_nube_min": 10,
+        "vel_nube_max": 25,
+        "descripcion": "Cielo cubierto, luz difusa dominante.",
+        "idx": 2
+    },
+    "tormenta": {
+        "coef_ilum": 0.1,
+        "prob_nube": 0.95,
+        "vel_nube_min": 30,
+        "vel_nube_max": 50,
+        "descripcion": "Muy poca luz, nubes densas y rápidas.",
+        "idx": 3
+    }
+}
+
 def guardar_posicion(x, y, iluminacion=None):
     if not GUARDAR_ARCHIVO:
         return
@@ -158,12 +199,94 @@ def toggle_fullscreen():
         is_fullscreen = False
 
 
-def dibujar_fondo(superficie, ancho, alto):
-    color_cielo = (135, 206, 235)
+def dibujar_panel_clima(superficie, modo_clima_actual):
+    w, h = tam_viewport()
+    # Ajusta la posición del panel si la ventana cambia de tamaño
+    panel_x = w - PANEL_W - 10
+    panel_y = 40
+    panel_h = 240
+
+    # 1. Dibujar el fondo del panel
+    panel_surf = pygame.Surface((PANEL_W, panel_h), pygame.SRCALPHA)
+    panel_surf.fill(COLOR_PANEL_BG)
+    superficie.blit(panel_surf, (panel_x, panel_y))
+
+    # 2. Título
+    titulo = fuente.render("MODO CLIMÁTICO", True, COLOR_TEXTO)
+    superficie.blit(titulo, (panel_x + PANEL_W // 2 - titulo.get_width() // 2, panel_y + 10))
+
+    y_start = panel_y + 40
+    botones = []
+
+    # 3. Dibujar botones para cada modo
+    for key, info in MODOS_CLIMATICOS.items():
+        es_activo = (key == modo_clima_actual)
+        color_btn = COLOR_BOTON_ACTIVO if es_activo else COLOR_BOTON_INACTIVO
+
+        btn_h = 30
+        btn_w_pad = PANEL_W - 20
+        btn_rect = pygame.Rect(panel_x + 10, y_start, btn_w_pad, btn_h)
+
+        # Dibujar el botón
+        pygame.draw.rect(superficie, color_btn, btn_rect, border_radius=5)
+
+        # Texto del botón
+        texto_btn = fuente.render(f"[{info['idx'] + 1}] {key.replace('_', ' ').title()}", True, COLOR_TEXTO)
+        superficie.blit(texto_btn, (btn_rect.x + 8, btn_rect.y + 7))
+
+        # Almacenar la región del botón para la detección de clics
+        botones.append({"key": key, "rect": btn_rect})
+        y_start += btn_h + 8
+
+    return botones
+
+
+def dibujar_fondo(superficie, ancho, alto, clima_info, cobertura_nubes):
+    # Definición de colores base (Soleado)
+    color_cielo_soleado = (135, 206, 235)  # Azul claro
+    color_pradera_base = (34, 139, 34)  # Verde hierba
+
+    # El COLOR_BG (18, 22, 30) se usa para la mezcla oscura
+
+    # Obtener el coeficiente de iluminación base del clima (e.g., 1.0 para soleado, 0.1 para tormenta)
+    coef_ilum = clima_info.get("coef_ilum", 1.0)
+
+    # Función de utilidad para mezclar el color base con el color oscuro del fondo
+    def mezclar_color(color_base, factor):
+        # El factor_mezcla varía entre el color oscuro (factor bajo) y el color base (factor alto)
+        r = int(color_base[0] * factor + COLOR_BG[0] * (1 - factor))
+        g = int(color_base[1] * factor + COLOR_BG[1] * (1 - factor))
+        b = int(color_base[2] * factor + COLOR_BG[2] * (1 - factor))
+        return (r, g, b)
+
+    # El factor de mezcla se ajusta para ser más notorio en climas oscuros.
+    # Mantiene un mínimo de 0.3 de mezcla para evitar el negro total.
+    factor_mezcla = max(0.3, 0.5 + coef_ilum * 0.5)
+
+    color_cielo = mezclar_color(color_cielo_soleado, factor_mezcla)
+    color_pradera = mezclar_color(color_pradera_base, factor_mezcla)
+
+    # 1. Dibujar el cielo
     alto_cielo = int(alto * 0.75)
     superficie.fill(color_cielo, (0, 0, ancho, alto_cielo))
-    color_pradera = (34, 139, 34)
+
+    # 2. Dibujar la pradera
     superficie.fill(color_pradera, (0, alto_cielo, ancho, alto - alto_cielo))
+
+    # 3. Efecto de luz difusa / neblina para nubes
+    if cobertura_nubes > 0.0 or coef_ilum < 0.9:
+        neblina = pygame.Surface((ancho, alto), pygame.SRCALPHA)
+        # El color de la neblina es blanco-azulado, ajustado por la oscuridad del clima
+        neblina_base = (200, 220, 240)
+        neblina_color = mezclar_color(neblina_base, factor_mezcla)
+
+        # La opacidad (alpha) es mayor cuando la cobertura o la oscuridad del clima son altas
+        alpha_cobertura = cobertura_nubes * 120  # Máximo 120 (47% de opacidad)
+        alpha_oscuridad = (1 - coef_ilum) * 100
+        alpha = int(min(255, alpha_cobertura + alpha_oscuridad))
+
+        neblina.fill((neblina_color[0], neblina_color[1], neblina_color[2], alpha))
+        superficie.blit(neblina, (0, 0))
 
 
 def dibujar_nubes(superficie, nubes_data):
@@ -175,16 +298,33 @@ def dibujar_nubes(superficie, nubes_data):
         superficie.blit(s, (cx - w // 2, cy - h // 2))
 
 
-def dibujar_brillo(superficie, centro, radio_interno, radio_externo, color=(255, 210, 40)):
+def dibujar_brillo(superficie, centro, radio_interno, radio_externo, coef_ilum=1.0):
     cx, cy = centro
-    brillo = pygame.Surface((radio_externo*2, radio_externo*2), pygame.SRCALPHA)
+    color_base = (255, 210, 40)
+
+    # Ajustar el color del sol hacia el blanco si la iluminación es baja
+    r_adj = int(color_base[0] * (0.5 + coef_ilum * 0.5))
+    g_adj = int(color_base[1] * (0.6 + coef_ilum * 0.4))
+    b_adj = int(color_base[2] * (0.7 + coef_ilum * 0.3))
+    color_sol_ajustado = (r_adj, g_adj, b_adj)
+
+    brillo = pygame.Surface((radio_externo * 2, radio_externo * 2), pygame.SRCALPHA)
     pasos = 18
+
     for i in range(pasos, 0, -1):
         r = int(radio_externo * (i / pasos))
-        alpha = int(200 * (i / pasos) * 0.6)
-        col = (color[0], color[1], color[2], alpha)
+        # Atenúa la opacidad del brillo exterior
+        alpha_base = int(200 * (i / pasos) * 0.6)
+        alpha = int(alpha_base * coef_ilum)
+
+        col = (color_sol_ajustado[0], color_sol_ajustado[1], color_sol_ajustado[2], alpha)
         pygame.draw.circle(brillo, col, (radio_externo, radio_externo), r)
-    pygame.draw.circle(brillo, (color[0], color[1], color[2], 255), (radio_externo, radio_externo), radio_interno)
+
+    # Dibujar el círculo central del sol
+    alpha_centro = int(255 * min(1.0, 0.7 + coef_ilum * 0.3))
+    pygame.draw.circle(brillo, (color_sol_ajustado[0], color_sol_ajustado[1], color_sol_ajustado[2], alpha_centro),
+                       (radio_externo, radio_externo), radio_interno)
+
     superficie.blit(brillo, (cx - radio_externo, cy - radio_externo))
 
 
@@ -256,6 +396,7 @@ def hud(superficie, texto_linea, iluminacion_normalizada):
     dibujar_barra_iluminacion(superficie, iluminacion_normalizada)
 
 
+
 def menu():
     seleccion = None
     while True:
@@ -266,15 +407,19 @@ def menu():
         t2 = fuente.render("[2] Policristalino (Media Ef.)", True, (200, 220, 255))
         t3 = fuente.render("[3] Película Delgada (Baja Ef.)", True, (200, 220, 255))
         t4 = fuente.render("[4] Panel Vertical (Default)", True, (200, 220, 255))
-        pantalla.blit(titulo, (w//2 - titulo.get_width()//2, h//2 - 90))
-        pantalla.blit(t1,     (w//2 - t1.get_width()//2,     h//2 - 40))
-        pantalla.blit(t2,     (w//2 - t2.get_width()//2,     h//2))
-        pantalla.blit(t3,     (w//2 - t3.get_width()//2,     h//2 + 40))
-        pantalla.blit(t4,     (w//2 - t4.get_width()//2,     h//2 + 80))
+        pantalla.blit(titulo, (w // 2 - titulo.get_width() // 2, h // 2 - 90))
+        pantalla.blit(t1, (w // 2 - t1.get_width() // 2, h // 2 - 40))
+        pantalla.blit(t2, (w // 2 - t2.get_width() // 2, h // 2))
+        pantalla.blit(t3, (w // 2 - t3.get_width() // 2, h // 2 + 40))
+        pantalla.blit(t4, (w // 2 - t4.get_width() // 2, h // 2 + 80))
         pygame.display.flip()
         for evento in pygame.event.get():
             if evento.type == pygame.QUIT:
-                pygame.quit(); exit()
+                pygame.quit();
+                exit()
+            elif evento.type == pygame.K_ESCAPE:
+                pygame.quit();
+                exit()
             elif evento.type == pygame.VIDEORESIZE:
                 pass
             elif evento.type == pygame.KEYDOWN:
@@ -312,16 +457,31 @@ def calcular_cobertura_nubes(sol_x, sol_y, nubes):
 
 def principal():
     tipo_panel = menu()
+    if not tipo_panel:
+        return
+
+
+    modo_clima = "soleado"  # Modo por defecto
+    clima_info = MODOS_CLIMATICOS[modo_clima]
+
     w_start, h_start = tam_viewport()
-    nubes = [
-        {'x': 100, 'y': 100, 'w': 100, 'h': 50, 'speed': 20},
-        {'x': 350, 'y': 80, 'w': 150, 'h': 60, 'speed': 15},
-        {'x': 650, 'y': 120, 'w': 80, 'h': 40, 'speed': 25},
-        {'x': w_start + 50, 'y': 110, 'w': 120, 'h': 55, 'speed': 18},
-    ]
+    num_nubes = 4
+
+    nubes = []
+    for _ in range(4):
+        nubes.append({
+            'x': random.randint(0, w_start),
+            'y': random.randint(80, 150),
+            'w': random.randint(80, 150),
+            'h': random.randint(40, 60),
+            'speed': random.randint(clima_info['vel_nube_min'], clima_info['vel_nube_max']),
+        })
+
     sol_x, sol_y = posicion_aleatoria(tipo_panel)
     tiempo_sol = pygame.time.get_ticks()
     guardar_posicion(sol_x, sol_y)
+
+
     angulo_panel = 0.0
     seguimiento_continuo = True
     vel_ang = 0.0
@@ -332,19 +492,51 @@ def principal():
     pid_prev_error = 0.0
     pid_integral_limit = 50.0
     energia_acumulada_Wh = 0.0
+
+    botones_clima = []
     while ejecutando:
         dt = reloj.tick(60)
         dt_seg = dt / 1000.0
         ahora = pygame.time.get_ticks()
         w, h = tam_viewport()
+
+        clima_info = MODOS_CLIMATICOS[modo_clima]
+        cobertura = calcular_cobertura_nubes(sol_x, sol_y, nubes)
+
         for evento in pygame.event.get():
             if evento.type == pygame.QUIT:
                 ejecutando = False
             elif evento.type == pygame.VIDEORESIZE:
                 pass
+            elif evento.type == pygame.MOUSEBUTTONDOWN:
+                if evento.button == 1:  # Botón izquierdo
+                    mouse_pos = evento.pos
+                    # Verificar si se hizo clic en un botón del panel de clima
+                    for boton in botones_clima:
+                        if boton["rect"].collidepoint(mouse_pos):
+                            # Actualiza el modo climático y reinicia PID
+                            modo_clima = boton["key"]
+                            pid_integral = 0.0
+                            pid_prev_error = 0.0
+                            print(f"Modo climático cambiado a: {modo_clima}")
+                            break
+
             elif evento.type == pygame.KEYDOWN:
                 if evento.key == pygame.K_ESCAPE:
                     ejecutando = False
+
+                if evento.key in [pygame.K_1, pygame.K_2, pygame.K_3, pygame.K_4]:
+                    idx = evento.key - pygame.K_1  # 0, 1, 2, 3
+
+                    # Encontrar el modo correspondiente al índice
+                    for key, info in MODOS_CLIMATICOS.items():
+                        if info['idx'] == idx:
+                            modo_clima = key
+                            pid_integral = 0.0
+                            pid_prev_error = 0.0
+                            print(f"Modo climático cambiado a: {modo_clima}")
+                            break
+
                 elif evento.key == pygame.K_r:
                     sol_x, sol_y = posicion_aleatoria(tipo_panel)
                     tiempo_sol = ahora
@@ -356,6 +548,7 @@ def principal():
                 elif evento.key == pygame.K_g:
                     global RAFAGA_VIENTO_ON
                     RAFAGA_VIENTO_ON = not RAFAGA_VIENTO_ON
+
         for cloud in nubes:
             cloud['x'] -= cloud['speed'] * dt_seg
             if cloud['x'] + cloud['w'] < 0:
@@ -363,7 +556,9 @@ def principal():
                 cloud['y'] = random.randint(80, 150)
                 cloud['w'] = random.randint(80, 150)
                 cloud['h'] = random.randint(40, 60)
-                cloud['speed'] = random.randint(15, 30)
+                # Regeneración con nuevos parámetros de velocidad del clima
+                cloud['speed'] = random.randint(clima_info['vel_nube_min'], clima_info['vel_nube_max'])
+
         if ahora - tiempo_sol >= INTERVALO_MS:
             sol_x, sol_y = posicion_aleatoria(tipo_panel)
             tiempo_sol = ahora
@@ -436,7 +631,11 @@ def principal():
             cosi = 0.0
         atenuacion = 1.0 / (1.0 + (dist / 400.0) ** 2)
         cobertura = calcular_cobertura_nubes(sol_x, sol_y, nubes)
-        iluminacion_normalizada = limitar(cosi * atenuacion * (1.0 - cobertura), 0.0, 1.0)
+
+        dibujar_fondo(pantalla, w, h, clima_info, cobertura)
+
+        factor_clima_base = clima_info.get("coef_ilum", 1.0)
+        iluminacion_normalizada = limitar(cosi * atenuacion * (1.0 - cobertura) * factor_clima_base, 0.0, 1.0)
         radiacion_maxima = 1000.0
         radiacion_efectiva = radiacion_maxima * iluminacion_normalizada
         eficiencia_base = panel_info.get("eficiencia_base", 0.18)
@@ -449,7 +648,9 @@ def principal():
         potencia = max(0.0, potencia)
         energia_acumulada_Wh += potencia * dt_seg / 3600.0
         iluminacion_actual = iluminacion_normalizada
-        dibujar_fondo(pantalla, w, h)
+
+        dibujar_fondo(pantalla, w, h, clima_info, cobertura)
+
         for c in nubes:
             dx = sol_x - c['x']
             dy = sol_y - c['y']
@@ -464,8 +665,9 @@ def principal():
             s = pygame.Surface((c['w'], c['h']), pygame.SRCALPHA)
             pygame.draw.ellipse(s, (255, 255, 255, alpha), s.get_rect())
             pantalla.blit(s, (c['x'] - c['w'] // 2, c['y'] - c['h'] // 2))
+
         dibujar_margen(pantalla)
-        dibujar_brillo(pantalla, (sol_x, sol_y), RADIO_SOL, RADIO_BRILLO)
+        dibujar_brillo(pantalla, (sol_x, sol_y), RADIO_SOL, RADIO_BRILLO, clima_info.get("coef_ilum", 1.0))
         punta_x, punta_y, _ = dibujar_panel(pantalla, base_panel[0], base_panel[1], angulo_panel, tipo_panel)
         dibujar_lineas_imaginarias(pantalla, punta_x, punta_y, sol_x, sol_y, angulo_panel)
         tiempo_restante = max(0, INTERVALO_MS - (ahora - tiempo_sol)) / 1000.0
@@ -474,13 +676,14 @@ def principal():
         if radiacion_maxima * area_panel_sim > 0:
             eficacia = potencia / (radiacion_maxima * area_panel_sim)
         hud_txt = (
-            f"Tipo: {tipo_panel.capitalize()} | Seguimiento: {'ON' if seguimiento_continuo else 'OFF'} | "
-            f"Potencia: {potencia:.1f} W | Eficacia: {eficacia*100:4.1f}% | Energia acum: {energia_acumulada_Wh:6.3f} Wh | "
-            f"Ilumin: {iluminacion_normalizada*100:5.1f}% | Error: {int(error):>3}° | Ángulo Panel: {int(angulo_panel):>3}° | "
+            f"Tipo: {tipo_panel.capitalize()} | Clima: {modo_clima.replace('_', ' ').title()} | Seguimiento: {'ON' if seguimiento_continuo else 'OFF'} | "
+            f"Potencia: {potencia:.1f} W | Eficacia: {eficacia * 100:4.1f}% | Energia acum: {energia_acumulada_Wh:6.3f} Wh | "
+            f"Ilumin: {iluminacion_normalizada * 100:5.1f}% | Error: {int(error):>3}° | Ángulo Panel: {int(angulo_panel):>3}° | "
             f"Vel: {vel_ang:4.1f}°/s | Realista:{'ON' if MODO_REALISTA else 'OFF'} | Viento:{'ON' if RAFAGA_VIENTO_ON else 'OFF'} | "
             f"[T] toggle | [R] sol | [Q/E] manual | [F] full | [G] viento"
         )
         hud(pantalla, hud_txt, iluminacion_normalizada)
+        botones_clima = dibujar_panel_clima(pantalla, modo_clima)
         guardar_posicion(sol_x, sol_y, iluminacion_actual)
         pygame.display.flip()
     pygame.quit()
