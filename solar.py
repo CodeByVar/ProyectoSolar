@@ -289,13 +289,46 @@ def dibujar_fondo(superficie, ancho, alto, clima_info, cobertura_nubes):
         superficie.blit(neblina, (0, 0))
 
 
-def dibujar_nubes(superficie, nubes_data):
-    color_nube = (255, 255, 255, 200)
-    for cloud in nubes_data:
-        cx, cy, w, h = cloud['x'], cloud['y'], cloud['w'], cloud['h']
-        s = pygame.Surface((w, h), pygame.SRCALPHA)
-        pygame.draw.ellipse(s, color_nube, s.get_rect())
-        superficie.blit(s, (cx - w // 2, cy - h // 2))
+def dibujar_nubes(superficie, nubes_data, sol_x, sol_y, clima_info):
+    """Dibuja las nubes ajustando su color y transparencia según el clima y la posición del sol."""
+    coef_ilum = clima_info.get("coef_ilum", 1.0)
+
+    # 1. Ajuste de color: De blanco (soleado) a gris oscuro (tormenta)
+    # Rango de 153 (tormenta) a 255 (soleado)
+    base_color_val = int(255 * (0.6 + 0.4 * coef_ilum))
+    color_nube_base = (base_color_val, base_color_val, base_color_val)
+
+    for c in nubes_data:
+        dx = sol_x - c['x']
+        dy = sol_y - c['y']
+        rx = max(1.0, c['w'] / 2.0)
+        ry = max(1.0, c['h'] / 2.0)
+        # Distancia normalizada al sol
+        nd = math.hypot(dx / rx, dy / ry)
+
+        # 2. Ajuste de Alpha (Transparencia):
+        # Base alpha: 150 (soleado) a 240 (tormenta)
+        base_alpha = int(150 + (1.0 - coef_ilum) * 90)
+
+        # Factor de atenuación si la nube está cerca del sol (se supone que el sol la ilumina más fuerte/la nube es menos densa allí)
+        dist_alpha_factor = 1.0
+        if nd <= 1.0:
+            # Más transparente si cubre el sol
+            dist_alpha_factor = 0.5
+        elif nd <= 2.0:
+            # Transición de transparencia
+            dist_alpha_factor = 0.5 + 0.5 * (nd - 1.0)
+
+        final_alpha = int(base_alpha * dist_alpha_factor)
+        final_alpha = limitar(final_alpha, 50, 255)
+
+        col = (color_nube_base[0], color_nube_base[1], color_nube_base[2], final_alpha)
+
+        # Crear superficie para la nube con transparencia
+        s = pygame.Surface((c['w'], c['h']), pygame.SRCALPHA)
+        pygame.draw.ellipse(s, col, s.get_rect())
+        superficie.blit(s, (c['x'] - c['w'] // 2, c['y'] - c['h'] // 2))
+
 
 
 def dibujar_brillo(superficie, centro, radio_interno, radio_externo, coef_ilum=1.0):
@@ -455,27 +488,36 @@ def calcular_cobertura_nubes(sol_x, sol_y, nubes):
     return limitar(cobertura, 0.0, 1.0)
 
 
+def regenerar_nubes(w, h, clima_info):
+    """Genera un nuevo conjunto de nubes basado en la información climática."""
+    nubes = []
+
+    # El número base de nubes se ajusta por la probabilidad de nube del clima
+    prob_factor = clima_info.get('prob_nube', 0.0)
+    # Factor de escalado: 1 (soleado) a 4 (tormenta)
+    cloud_factor = 1.0 + (prob_factor * 3)
+    num_nubes = int(4 * cloud_factor)  # 4 es el número base de nubes
+
+    for _ in range(num_nubes):
+        nubes.append({
+            'x': random.randint(0, w),
+            'y': random.randint(80, 200),  # Rango de altura más amplio
+            'w': random.randint(80, 200),  # Tamaño de nube más variado
+            'h': random.randint(40, 100),  # Tamaño de nube más variado
+            'speed': random.randint(clima_info['vel_nube_min'], clima_info['vel_nube_max']),
+        })
+    return nubes
+
 def principal():
     tipo_panel = menu()
     if not tipo_panel:
         return
-
-
     modo_clima = "soleado"  # Modo por defecto
     clima_info = MODOS_CLIMATICOS[modo_clima]
 
     w_start, h_start = tam_viewport()
-    num_nubes = 4
 
-    nubes = []
-    for _ in range(4):
-        nubes.append({
-            'x': random.randint(0, w_start),
-            'y': random.randint(80, 150),
-            'w': random.randint(80, 150),
-            'h': random.randint(40, 60),
-            'speed': random.randint(clima_info['vel_nube_min'], clima_info['vel_nube_max']),
-        })
+    nubes = regenerar_nubes(w_start, h_start, clima_info)
 
     sol_x, sol_y = posicion_aleatoria(tipo_panel)
     tiempo_sol = pygame.time.get_ticks()
@@ -494,6 +536,7 @@ def principal():
     energia_acumulada_Wh = 0.0
 
     botones_clima = []
+    ultimo_modo_clima = modo_clima
     while ejecutando:
         dt = reloj.tick(60)
         dt_seg = dt / 1000.0
@@ -549,8 +592,14 @@ def principal():
                     global RAFAGA_VIENTO_ON
                     RAFAGA_VIENTO_ON = not RAFAGA_VIENTO_ON
 
+        if modo_clima != ultimo_modo_clima:
+            clima_info = MODOS_CLIMATICOS[modo_clima]
+            nubes = regenerar_nubes(w, h, clima_info)
+            ultimo_modo_clima = modo_clima
+
         for cloud in nubes:
             cloud['x'] -= cloud['speed'] * dt_seg
+
             if cloud['x'] + cloud['w'] < 0:
                 cloud['x'] = w + random.randint(50, 200)
                 cloud['y'] = random.randint(80, 150)
