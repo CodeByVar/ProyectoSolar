@@ -621,6 +621,53 @@ def principal():
             angulo_panel = limitar(angulo_panel + 1.5, ANG_MIN, ANG_MAX)
         if teclas[pygame.K_e]:
             angulo_panel = limitar(angulo_panel - 1.5, ANG_MIN, ANG_MAX)
+
+        ang_objetivo = angulo_hacia_punto(punta_x, punta_y, sol_x, sol_y)
+        error = normalizar_angulo_deg(ang_objetivo - angulo_panel)
+
+        if seguimiento_continuo:
+            if dt_seg <= 0:
+                dt_seg = 1e-6
+            if MODO_REALISTA:
+                if en_banda_muerta:
+                    if abs(error) > (BANDA_MUERTA_DEG + HISTERESIS_DEG):
+                        en_banda_muerta = False
+                else:
+                    if abs(error) <= BANDA_MUERTA_DEG:
+                        en_banda_muerta = True
+
+                vel_obj = 0.0
+                if not en_banda_muerta:
+                    pid_integral += error * dt_seg
+                    pid_integral = limitar(pid_integral, -pid_integral_limit, pid_integral_limit)
+                    derivada = (error - pid_prev_error) / dt_seg
+                    pid_prev_error = error
+                    salida_pid = (Kp * error) + (Ki * pid_integral) + (Kd * derivada)
+                    vel_obj = limitar(
+                        salida_pid * (VEL_MAX_DEG_PER_SEC / max(VEL_MAX, 1e-6)),
+                        -VEL_MAX_DEG_PER_SEC,
+                        VEL_MAX_DEG_PER_SEC
+                    )
+                acc = limitar(
+                    vel_obj - vel_ang,
+                    -ACC_MAX_DEG_PER_SEC2 * dt_seg,
+                    ACC_MAX_DEG_PER_SEC2 * dt_seg
+                )
+
+                if RAFAGA_VIENTO_ON and random.random() < 0.1:
+                    acc += random.gauss(0.0, 15.0) * dt_seg
+                vel_ang = (vel_ang * max(0.0, 1.0 - FRICCION_ZETA * dt_seg)) + acc
+                vel_ang = limitar(vel_ang, -VEL_MAX_DEG_PER_SEC, VEL_MAX_DEG_PER_SEC)
+                angulo_panel += vel_ang * dt_seg
+                if angulo_panel < ANG_MIN:
+                    angulo_panel = ANG_MIN
+                    vel_ang = 0.0
+                elif angulo_panel > ANG_MAX:
+                    angulo_panel = ANG_MAX
+                    vel_ang = 0.0
+
+            else:
+=======
         ang_objetivo = angulo_hacia_punto(punta_x, punta_y, sol_x, sol_y)
         error = normalizar_angulo_deg(ang_objetivo - angulo_panel)
         if seguimiento_continuo:
@@ -650,6 +697,14 @@ def principal():
                 derivada = (error - pid_prev_error) / dt_seg
                 pid_prev_error = error
                 salida_pid = (Kp * error) + (Ki * pid_integral) + (Kd * derivada)
+                salida_pid_clamped = limitar(salida_pid, -VEL_MAX, VEL_MAX)
+                angulo_panel = limitar(
+                    angulo_panel + salida_pid_clamped * SMOOTH,
+                    ANG_MIN,
+                    ANG_MAX
+                )
+
+=======
                 vel_obj = limitar(salida_pid * (VEL_MAX_DEG_PER_SEC / max(VEL_MAX, 1e-6)),
                                 -VEL_MAX_DEG_PER_SEC, VEL_MAX_DEG_PER_SEC)
             acc = limitar(vel_obj - vel_ang, -ACC_MAX_DEG_PER_SEC2 * dt_seg, ACC_MAX_DEG_PER_SEC2 * dt_seg)
