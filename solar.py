@@ -5,6 +5,8 @@ import json
 import os
 import math
 
+pygame.init()
+
 ANCHO, ALTO = 800, 600
 RADIO_SOL = 18
 RADIO_BRILLO = 110
@@ -21,6 +23,46 @@ COLOR_MARGEN = (70, 80, 90)
 COLOR_LINEA_SOL = (250, 230, 120)
 COLOR_NORMAL = (120, 220, 255)
 COLOR_ERROR = (255, 120, 120)
+#colores extra
+COLOR_UI_BG = (20, 25, 35, 230)
+COLOR_UI_BORDER = (60, 160, 220)
+COLOR_ACCENT = (255, 180, 50)
+COLOR_TEXT_H1 = (255, 255, 255)
+COLOR_TEXT_H2 = (180, 200, 220)
+COLOR_SUCCESS = (100, 255, 100)
+COLOR_DANGER = (255, 80, 80)
+COLOR_HUD_BG_DARK = (15, 20, 30, 245)
+COLOR_WIDGET_FILL = (30, 35, 45)
+COLOR_WIDGET_STROKE = (60, 70, 85)
+COLOR_LABEL = (150, 160, 170)
+COLOR_VALUE = (220, 230, 240)
+
+#tipografias
+try:
+    fuente_grande = pygame.font.SysFont("consolas", 32, bold=True)
+    fuente_ui = pygame.font.SysFont("consolas", 16)
+    fuente_bold = pygame.font.SysFont("consolas", 16, bold=True)
+except:
+    fuente_grande = pygame.font.SysFont(None, 40)
+    fuente_ui = pygame.font.SysFont(None, 20)
+    fuente_bold = pygame.font.SysFont(None, 20)
+
+
+def dibujar_caja_ui(superficie, x, y, w, h, color_bg=COLOR_UI_BG, borde=True):
+    # Dibuja un rectángulo con fondo oscuro y borde neón
+    rect = pygame.Rect(x, y, w, h)
+    # Fondo (necesita superficie con alpha para transparencia real)
+    s = pygame.Surface((w, h), pygame.SRCALPHA)
+    s.fill(color_bg)
+    superficie.blit(s, (x, y))
+
+    if borde:
+        pygame.draw.rect(superficie, COLOR_UI_BORDER, rect, 2, border_radius=6)
+        # Pequeño detalle técnico en las esquinas
+        pygame.draw.circle(superficie, COLOR_UI_BORDER, (x, y), 2)
+        pygame.draw.circle(superficie, COLOR_UI_BORDER, (x + w, y), 2)
+        pygame.draw.circle(superficie, COLOR_UI_BORDER, (x, y + h), 2)
+        pygame.draw.circle(superficie, COLOR_UI_BORDER, (x + w, y + h), 2)
 
 ANG_MIN, ANG_MAX = -85, 85
 
@@ -42,7 +84,6 @@ RAFAGA_VIENTO_ON = False
 SHOW_DEBUG_CONTROL = True
 
 os.environ["SDL_VIDEO_CENTERED"] = "1"
-pygame.init()
 WIN_START_W, WIN_START_H = 1100, 700
 flags_windowed = pygame.RESIZABLE
 pantalla = pygame.display.set_mode((WIN_START_W, WIN_START_H), flags_windowed)
@@ -59,6 +100,7 @@ windowed_size = (WIN_START_W, WIN_START_H)
 
 def tam_viewport():
     return pantalla.get_size()
+
 
 
 TIPOS_PANELES = {
@@ -251,38 +293,44 @@ def toggle_fullscreen():
         is_fullscreen = False
 
 
-def dibujar_panel_clima(superficie, modo_clima_actual):
-    w, h = tam_viewport()
-    panel_x = w - PANEL_W - 10
-    panel_y = 40
-    panel_h = 240
+def dibujar_panel_clima(superficie, x, y,  modo_clima_actual):
 
-    panel_surf = pygame.Surface((PANEL_W, panel_h), pygame.SRCALPHA)
-    panel_surf.fill(COLOR_PANEL_BG)
-    superficie.blit(panel_surf, (panel_x, panel_y))
+    panel_w = 240
+    panel_h = 210
 
-    titulo = fuente.render("MODO CLIMÁTICO", True, COLOR_TEXTO)
-    superficie.blit(titulo, (panel_x + PANEL_W // 2 - titulo.get_width() // 2, panel_y + 10))
+    rect_panel = pygame.Rect(x, y, panel_w, panel_h)
 
-    y_start = panel_y + 40
+    dibujar_caja_ui(superficie, x, y, panel_w, panel_h)
+
+
+    titulo = fuente_bold.render("CONTROL CLIMÁTICO", True, COLOR_ACCENT)
+    superficie.blit(titulo, (x + 15, y + 10))
+
+    y_start = y + 40
     botones = []
 
     for key, info in MODOS_CLIMATICOS.items():
         es_activo = (key == modo_clima_actual)
-        color_btn = COLOR_BOTON_ACTIVO if es_activo else COLOR_BOTON_INACTIVO
 
-        btn_h = 30
-        btn_w_pad = PANEL_W - 20
-        btn_rect = pygame.Rect(panel_x + 10, y_start, btn_w_pad, btn_h)
+        color_rect = (40, 100, 140) if es_activo else (40, 45, 55)
+        color_borde = COLOR_ACCENT if es_activo else (80, 80, 80)
+        color_texto = (255, 255, 255) if es_activo else (180, 180, 180)
 
-        pygame.draw.rect(superficie, color_btn, btn_rect, border_radius=5)
-        texto_btn = fuente.render(f"[{info['idx'] + 1}] {key.replace('_', ' ').title()}", True, COLOR_TEXTO)
-        superficie.blit(texto_btn, (btn_rect.x + 8, btn_rect.y + 7))
+        btn_h = 32
+        btn_w_pad = PANEL_W - 30
+        btn_rect = pygame.Rect(x + 15, y_start, btn_w_pad, btn_h)
 
+        pygame.draw.rect(superficie, color_rect, btn_rect, border_radius=5)
+        pygame.draw.rect(superficie, color_borde, btn_rect, 1 if not es_activo else 2, border_radius=4)
+        texto_btn = fuente_ui.render(f"{key.replace('_', ' ').title()}", True, color_texto)
+        superficie.blit(texto_btn, (btn_rect.x + 10, btn_rect.y + 8))
+
+        if es_activo:
+            pygame.draw.circle(superficie, COLOR_SUCCESS, (btn_rect.right - 15, btn_rect.centery), 4)
         botones.append({"key": key, "rect": btn_rect})
         y_start += btn_h + 8
 
-    return botones
+    return rect_panel, botones
 
 
 def dibujar_fondo(superficie, ancho, alto, clima_info, cobertura_nubes):
@@ -448,23 +496,123 @@ def dibujar_barra_iluminacion(superficie, iluminacion_normalizada):
     superficie.blit(surf, (x - 60, y - 2))
 
 
-def hud(superficie, texto_linea, iluminacion_normalizada, seguimiento_continuo):
-    w, _ = tam_viewport()
-    barra = pygame.Surface((w, 28), pygame.SRCALPHA)
-    barra.fill(COLOR_HUD_BG)
-    superficie.blit(barra, (0, 0))
-    surf_txt = fuente.render(texto_linea, True, COLOR_TEXTO)
-    superficie.blit(surf_txt, (8, 5))
+def dibujar_widget(superficie, x, y, titulo, valor, color_val=COLOR_VALUE, ancho=140):
+    alto = 60  # AUMENTO: Antes era 50, ahora 60 para más espacio vertical
+    rect_bg = pygame.Rect(x, y, ancho, alto)
 
-    modo_texto = "AUTO" if seguimiento_continuo else "MANUAL"
-    modo_color = (0, 200, 0) if seguimiento_continuo else (200, 60, 60)
-    modo_surf = fuente.render(modo_texto, True, (0, 0, 0))
-    box_w, box_h = 80, 22
-    box_x, box_y = 10, 30
-    pygame.draw.rect(superficie, modo_color, (box_x, box_y, box_w, box_h), border_radius=5)
-    superficie.blit(modo_surf, (box_x + 10, box_y + 3))
+    # 1. Fondo del widget
+    pygame.draw.rect(superficie, COLOR_WIDGET_FILL, rect_bg, border_radius=8)
 
-    dibujar_barra_iluminacion(superficie, iluminacion_normalizada)
+    # 2. Borde sutil
+    pygame.draw.rect(superficie, COLOR_WIDGET_STROKE, rect_bg, 1, border_radius=8)
+
+    # 3. Renderizar textos
+    lbl = fuente_ui.render(titulo, True, COLOR_LABEL)
+    val = fuente_grande.render(str(valor), True, color_val)
+
+    # 4. CENTRADO PERFECTO
+    # Calculamos el centro horizontal (centerx) basado en la caja.
+    # Para la altura (Y), dividimos la caja visualmente:
+
+    # El título se centra exactamente en el píxel 15 desde arriba
+    lbl_rect = lbl.get_rect(centerx=rect_bg.centerx, centery=rect_bg.y + 15)
+
+    # El valor (número) se centra un poco más abajo, en el píxel 42 desde arriba
+    val_rect = val.get_rect(centerx=rect_bg.centerx, centery=rect_bg.y + 42)
+
+    superficie.blit(lbl, lbl_rect)
+    superficie.blit(val, val_rect)
+
+
+def hud(superficie, texto_linea_ignorado, iluminacion_normalizada, seguimiento_continuo,
+        potencia, energia, error, angulo, vel_ang, realista, viento):
+    w, h = tam_viewport()
+    alto_hud = 120  # Expandido para mayor comodidad visual
+
+    # --- FONDO DEL PANEL SUPERIOR ---
+    s = pygame.Surface((w, alto_hud), pygame.SRCALPHA)
+    s.fill(COLOR_HUD_BG_DARK)
+    superficie.blit(s, (0, 0))
+
+    # Línea de acento neón en la parte inferior del HUD
+    pygame.draw.line(superficie, COLOR_UI_BORDER, (0, alto_hud), (w, alto_hud), 2)
+
+    # --- CÁLCULO DE POSICIONES (GRID DE 3 COLUMNAS) ---
+    # Dividimos el ancho en 3 secciones para distribuir los elementos
+    ancho_seccion = w // 3
+    center_1 = ancho_seccion * 0.5  # Centro de la sección izquierda
+    center_2 = ancho_seccion * 1.5  # Centro de la sección central
+    center_3 = ancho_seccion * 2.5  # Centro de la sección derecha
+
+    # Ancho estándar de las cajas
+    w_box = 130
+    gap = 10  # Espacio entre cajas
+
+    # ================= SECCIÓN 1: ESTADO Y CONTROL (Izquierda) =================
+    # Título de sección (Opcional, visual)
+    lbl_sec1 = fuente_bold.render("SISTEMA DE CONTROL", True, COLOR_UI_BORDER)
+    superficie.blit(lbl_sec1, (20, 10))
+
+    lbl_modo = "AUTO" if seguimiento_continuo else "MANUAL"
+    col_modo = COLOR_SUCCESS if seguimiento_continuo else COLOR_ACCENT
+
+    # Caja 1: Modo
+    dibujar_widget(superficie, 20, 35, "MODO", lbl_modo, col_modo, w_box)
+
+    # Caja 2: Simulación (Debajo o al lado, aquí lo pongo al lado)
+    estado_sim = "REAL" if realista else "SIMPLE"
+    dibujar_widget(superficie, 20 + w_box + gap, 35, "FÍSICA", estado_sim, COLOR_TEXT_H2, w_box)
+
+    # Indicador de Viento (Pequeño led o texto)
+    if viento:
+        txt_viento = fuente_ui.render("⚠ VIENTO ACTIVO", True, COLOR_DANGER)
+        superficie.blit(txt_viento, (20, 90))
+
+    # ================= SECCIÓN 2: ENERGÍA (Centro) =================
+    # Centramos este bloque en la pantalla
+    start_x_sec2 = (w // 2.2) - (w_box * 2 + gap) // 2
+
+    # Barra de Irradiancia (Arriba de los números)
+    bar_w = 280
+    bar_h = 6
+    bar_x = (w // 2) - (bar_w // 2)
+    bar_y = 20
+
+    # Fondo barra
+    pygame.draw.rect(superficie, (50, 60, 70), (bar_x, bar_y, bar_w, bar_h), border_radius=3)
+    # Llenado barra
+    fill_w = int(bar_w * iluminacion_normalizada)
+    if fill_w > 0:
+        # Color gradiente simple (Amarillo a Rojo según intensidad)
+        col_bar = (255, 220, 50) if iluminacion_normalizada > 0.5 else (200, 150, 50)
+        pygame.draw.rect(superficie, col_bar, (bar_x, bar_y, fill_w, bar_h), border_radius=3)
+
+    lbl_irr = fuente_ui.render(f"IRRADIANCIA SOLAR: {iluminacion_normalizada * 100:.1f}%", True, COLOR_TEXT_H2)
+    lbl_rect = lbl_irr.get_rect(centerx=w // 2, bottom=bar_y - 4)
+    superficie.blit(lbl_irr, lbl_rect)
+
+    # Widgets de energía
+    dibujar_widget(superficie, start_x_sec2, 35, "POTENCIA (W)", f"{potencia:.1f}", COLOR_ACCENT, w_box)
+    dibujar_widget(superficie, start_x_sec2 + w_box + gap, 35, "ENERGÍA (Wh)", f"{energia:.1f}", COLOR_SUCCESS, w_box)
+
+    # ================= SECCIÓN 3: TELEMETRÍA (Derecha) =================
+    # Alineado a la derecha
+    start_x_sec3 = w - (w_box * 3 + gap * 2) - 20
+
+    # Colores dinámicos para el error
+    col_err = COLOR_SUCCESS if abs(error) < 2 else (COLOR_ACCENT if abs(error) < 10 else COLOR_DANGER)
+
+    dibujar_widget(superficie, start_x_sec3, 35, "ERROR (°)", f"{error:.2f}", col_err, w_box)
+    dibujar_widget(superficie, start_x_sec3 + w_box + gap, 35, "ÁNGULO PANEL", f"{angulo:.1f}", COLOR_TEXT_H1, w_box)
+    dibujar_widget(superficie, start_x_sec3 + (w_box + gap) * 2, 35, "VEL. MOTOR", f"{vel_ang:.1f}", COLOR_TEXT_H2,
+                   w_box)
+
+    # Teclas de ayuda rápida (pie del HUD)
+    ayuda = "[T] Auto/Man  [R] Reset Sol  [G] Viento  [M] Realismo  [C] Debug"
+    txt_ayuda = fuente_ui.render(ayuda, True, (100, 110, 120))
+    # Centrar ayuda en la parte inferior del HUD
+    rect_ayuda = txt_ayuda.get_rect(centerx=w // 2, bottom=alto_hud - 6)
+    superficie.blit(txt_ayuda, rect_ayuda)
 
 
 def dibujar_barra_error(superficie, error_deg, base_panel):
@@ -534,42 +682,81 @@ def dibujar_debug_control(superficie, p_term, i_term, d_term, vel_obj, vel_ang, 
 
 def menu():
     seleccion = None
+    reloj_menu = pygame.time.Clock()
+
+    opciones = [
+        ("1", "monocristalino", "Monocristalino", "Alta eficiencia, alto costo."),
+        ("2", "policristalino", "Policristalino", "Balance costo/beneficio."),
+        ("3", "pelicula", "Película Delgada", "Flexible, baja eficiencia."),
+        ("4", "vertical", "Panel Vertical", "Configuración estándar.")
+    ]
+
     while True:
-        pantalla.fill(COLOR_BG)
+        pantalla.fill((10, 15, 20))  # Fondo muy oscuro
         w, h = tam_viewport()
-        titulo = fuente.render("Selecciona el tipo de panel solar:", True, (255, 255, 255))
-        t1 = fuente.render("[1] Monocristalino (Alta Ef.)", True, (200, 220, 255))
-        t2 = fuente.render("[2] Policristalino (Media Ef.)", True, (200, 220, 255))
-        t3 = fuente.render("[3] Película Delgada (Baja Ef.)", True, (200, 220, 255))
-        t4 = fuente.render("[4] Panel Vertical (Default)", True, (200, 220, 255))
-        pantalla.blit(titulo, (w // 2 - titulo.get_width() // 2, h // 2 - 90))
-        pantalla.blit(t1, (w // 2 - t1.get_width() // 2, h // 2 - 40))
-        pantalla.blit(t2, (w // 2 - t2.get_width() // 2, h // 2))
-        pantalla.blit(t3, (w // 2 - t3.get_width() // 2, h // 2 + 40))
-        pantalla.blit(t4, (w // 2 - t4.get_width() // 2, h // 2 + 80))
+
+        # Título
+        titulo = fuente_grande.render("SISTEMA DE SEGUIMIENTO SOLAR", True, COLOR_UI_BORDER)
+        subtitulo = fuente_ui.render("Seleccione el tipo de tecnología fotovoltaica para iniciar", True, COLOR_TEXT_H2)
+
+        pantalla.blit(titulo, (w // 2 - titulo.get_width() // 2, 80))
+        pantalla.blit(subtitulo, (w // 2 - subtitulo.get_width() // 2, 120))
+
+        # Dibujar Tarjetas de opciones
+        card_w, card_h = 500, 80
+        start_y = 180
+        mouse_pos = pygame.mouse.get_pos()
+
+        for idx, key, nombre, desc in opciones:
+            rect_card = pygame.Rect(w // 2 - card_w // 2, start_y, card_w, card_h)
+            hover = rect_card.collidepoint(mouse_pos)
+
+            # Color dinámico si el mouse está encima
+            bg_color = (30, 40, 50, 200) if not hover else (40, 60, 80, 200)
+            border_col = COLOR_UI_BORDER if not hover else COLOR_ACCENT
+
+            # Dibujar fondo tarjeta
+            dibujar_caja_ui(pantalla, rect_card.x, rect_card.y, rect_card.w, rect_card.h, bg_color, False)
+            pygame.draw.rect(pantalla, border_col, rect_card, 2 if not hover else 3, border_radius=8)
+
+            # Texto Key [1]
+            txt_key = fuente_grande.render(f"[{idx}]", True, border_col)
+            pantalla.blit(txt_key, (rect_card.x + 20, rect_card.y + 25))
+
+            # Nombre y Detalle
+            txt_nom = fuente_grande.render(nombre, True, COLOR_TEXT_H1)
+            txt_desc = fuente_ui.render(desc, True, COLOR_TEXT_H2)
+
+            pantalla.blit(txt_nom, (rect_card.x + 90, rect_card.y + 15))
+            pantalla.blit(txt_desc, (rect_card.x + 90, rect_card.y + 45))
+
+            start_y += card_h + 15
+
+        # Footer
+        footer = fuente_ui.render("Presione la tecla [F] para Pantalla Completa | [ESC] Salir", True, (100, 100, 100))
+        pantalla.blit(footer, (w // 2 - footer.get_width() // 2, h - 40))
+
         pygame.display.flip()
+
         for evento in pygame.event.get():
             if evento.type == pygame.QUIT:
-                pygame.quit()
+                pygame.quit();
                 exit()
-            elif evento.type == pygame.K_ESCAPE:
-                pygame.quit()
-                exit()
-            elif evento.type == pygame.VIDEORESIZE:
-                pass
             elif evento.type == pygame.KEYDOWN:
                 if evento.key == pygame.K_1:
-                    seleccion = "monocristalino"
+                    return "monocristalino"
                 elif evento.key == pygame.K_2:
-                    seleccion = "policristalino"
+                    return "policristalino"
                 elif evento.key == pygame.K_3:
-                    seleccion = "pelicula"
+                    return "pelicula"
                 elif evento.key == pygame.K_4:
-                    seleccion = "vertical"
+                    return "vertical"
+                elif evento.key == pygame.K_ESCAPE:
+                    pygame.quit(); exit()
                 elif evento.key == pygame.K_f:
                     toggle_fullscreen()
-        if seleccion:
-            return seleccion
+
+        reloj_menu.tick(30)
 
 
 def calcular_cobertura_nubes(sol_x, sol_y, nubes):
@@ -641,6 +828,14 @@ def principal():
     vel_obj = 0.0
 
     botones_clima = []
+
+    clima_x = w_start - 260
+    clima_y = 140
+
+    rect_clima = pygame.Rect(clima_x, clima_y, 240, 210)  # Rect inicial temporal
+    arrastrando_clima = False
+    offset_drag_x = 0
+    offset_drag_y = 0
     ultimo_modo_clima = modo_clima
 
     while ejecutando:
@@ -660,13 +855,32 @@ def principal():
             elif evento.type == pygame.MOUSEBUTTONDOWN:
                 if evento.button == 1:
                     mouse_pos = evento.pos
+                    click_en_boton = False
+
                     for boton in botones_clima:
                         if boton["rect"].collidepoint(mouse_pos):
                             modo_clima = boton["key"]
                             pid_integral = 0.0
                             pid_prev_error = 0.0
                             print(f"Modo climático cambiado a: {modo_clima}")
+                            click_en_boton = True
                             break
+                    if not click_en_boton:
+                        if rect_clima.collidepoint(mouse_pos):
+                            arrastrando_clima = True
+                            # Calcular la diferencia entre el mouse y la esquina del panel
+                            offset_drag_x = clima_x - mouse_pos[0]
+                            offset_drag_y = clima_y - mouse_pos[1]
+            elif evento.type == pygame.MOUSEBUTTONUP:
+                if evento.button == 1:
+                    arrastrando_clima = False
+
+            elif evento.type == pygame.MOUSEMOTION:
+                if arrastrando_clima:
+                    # Actualizar posición del panel
+                    clima_x = evento.pos[0] + offset_drag_x
+                    clima_y = evento.pos[1] + offset_drag_y
+
             elif evento.type == pygame.KEYDOWN:
                 if evento.key == pygame.K_ESCAPE:
                     ejecutando = False
@@ -855,17 +1069,21 @@ def principal():
         if radiacion_maxima * area_panel_sim > 0:
             eficacia = potencia / (radiacion_maxima * area_panel_sim)
 
-        hud_txt = (
-            f"Tipo: {tipo_panel.capitalize()} | Clima: {modo_clima.replace('_', ' ').title()} | Seguimiento: {'ON' if seguimiento_continuo else 'OFF'} | "
-            f"Potencia: {potencia:.1f} W | Eficacia: {eficacia * 100:4.1f}% | Energia acum: {energia_acumulada_Wh:6.3f} Wh | "
-            f"Ilumin: {iluminacion_normalizada * 100:5.1f}% | Error: {int(error):>3}° | Ángulo Panel: {int(angulo_panel):>3}° | "
-            f"Vel: {vel_ang:4.1f}°/s | Realista:{'ON' if MODO_REALISTA else 'OFF'} | Viento:{'ON' if RAFAGA_VIENTO_ON else 'OFF'} | "
-            f"[T] toggle | [R] sol | [Q/E] manual | [F] full | [G] viento | [M] modo PID | [C] debug"
+        hud(
+            pantalla,
+            "",  # Texto ignorado
+            iluminacion_normalizada,
+            seguimiento_continuo,
+            potencia,
+            energia_acumulada_Wh,
+            error,
+            angulo_panel,
+            vel_ang,
+            MODO_REALISTA,
+            RAFAGA_VIENTO_ON
         )
-        hud(pantalla, hud_txt, iluminacion_normalizada, seguimiento_continuo)
 
-        botones_clima = dibujar_panel_clima(pantalla, modo_clima)
-        guardar_posicion(sol_x, sol_y, iluminacion_actual)
+        rect_clima, botones_clima = dibujar_panel_clima(pantalla, clima_x, clima_y, modo_clima)
 
         if SHOW_DEBUG_CONTROL:
             dibujar_debug_control(pantalla, p_term, i_term, d_term, vel_obj, vel_ang, error, en_banda_muerta)
