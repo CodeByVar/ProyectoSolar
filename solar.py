@@ -150,6 +150,47 @@ MODOS_CLIMATICOS = {
 }
 
 
+PANEL_W = 220
+PANEL_X = ANCHO - PANEL_W - 10 # Posición inicial del panel
+COLOR_PANEL_BG = (40, 45, 55, 220)
+COLOR_BOTON_ACTIVO = (255, 165, 0)
+COLOR_BOTON_INACTIVO = (70, 70, 70)
+
+MODOS_CLIMATICOS = {
+    "soleado": {
+        "coef_ilum": 1.0,
+        "prob_nube": 0.05,
+        "vel_nube_min": 5,
+        "vel_nube_max": 15,
+        "descripcion": "Cielo claro, máxima irradiancia.",
+        "idx": 0 # Nuevo índice para el botón
+    },
+    "parcialmente_nublado": {
+        "coef_ilum": 0.85,
+        "prob_nube": 0.4,
+        "vel_nube_min": 15,
+        "vel_nube_max": 30,
+        "descripcion": "Alternando sol y nubes.",
+        "idx": 1
+    },
+    "nublado": {
+        "coef_ilum": 0.35,
+        "prob_nube": 0.8,
+        "vel_nube_min": 10,
+        "vel_nube_max": 25,
+        "descripcion": "Cielo cubierto, luz difusa dominante.",
+        "idx": 2
+    },
+    "tormenta": {
+        "coef_ilum": 0.1,
+        "prob_nube": 0.95,
+        "vel_nube_min": 30,
+        "vel_nube_max": 50,
+        "descripcion": "Muy poca luz, nubes densas y rápidas.",
+        "idx": 3
+    }
+}
+
 def guardar_posicion(x, y, iluminacion=None):
     if not GUARDAR_ARCHIVO:
         return
@@ -594,7 +635,6 @@ def principal():
     pid_integral_limit = 50.0
     energia_acumulada_Wh = 0.0
 
-    # --- NUEVO: términos del control para debug ---
     p_term = 0.0
     i_term = 0.0
     d_term = 0.0
@@ -649,12 +689,10 @@ def principal():
                     seguimiento_continuo = not seguimiento_continuo
                 elif evento.key == pygame.K_g:
                     RAFAGA_VIENTO_ON = not RAFAGA_VIENTO_ON
-                # --- NUEVO: toggle modo realista y panel debug ---
                 elif evento.key == pygame.K_m:
                     MODO_REALISTA = not MODO_REALISTA
                 elif evento.key == pygame.K_c:
-                    SHOW_DEBUG_CONTROL = not SHOW_DEBUG_CONTROL
-                # --- FIN NUEVO ---
+                    SHOW_DEBUG_CONTROL = not SHOW_DEBUG_CONTRO
 
         if modo_clima != ultimo_modo_clima:
             clima_info = MODOS_CLIMATICOS[modo_clima]
@@ -663,6 +701,7 @@ def principal():
 
         for cloud in nubes:
             cloud['x'] -= cloud['speed'] * dt_seg
+
             if cloud['x'] + cloud['w'] < 0:
                 cloud['x'] = w + random.randint(50, 200)
                 cloud['y'] = random.randint(80, 150)
@@ -717,12 +756,11 @@ def principal():
                     derivada = (error - pid_prev_error) / dt_seg
                     pid_prev_error = error
 
-                    # --- NUEVO: desglosar PID para mostrarlo ---
                     p_term = Kp * error
                     i_term = Ki * pid_integral
                     d_term = Kd * derivada
                     salida_pid = p_term + i_term + d_term
-                    # --- FIN NUEVO ---
+
 
                     vel_obj = limitar(
                         salida_pid * (VEL_MAX_DEG_PER_SEC / max(VEL_MAX, 1e-6)),
